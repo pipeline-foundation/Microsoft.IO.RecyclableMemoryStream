@@ -12,6 +12,11 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     steps:
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 5.0.203
+
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -20,7 +25,7 @@ jobs:
         with:
           queries: security-and-quality
 
-      - name: Autobuild
+      - name: Perform CodeQL Autobuild
         uses: github/codeql-action/autobuild@v1
 
       - name: Perform CodeQL Analysis
