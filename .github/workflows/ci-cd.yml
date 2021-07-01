@@ -1,0 +1,154 @@
+name: CI/CD Pipeline
+
+on: [ push, pull_request, workflow_dispatch ]
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    outputs:
+      latest_version: ${{ steps.tag_generator.outputs.new_version }}
+    steps:
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 5.0.203
+
+      - name: Data gatherer
+        id: data_gatherer
+        shell: pwsh
+        run: |
+          # Get default branch
+          $repo = "${{ github.repository }}"
+          $defaultBranch = Invoke-RestMethod -Method GET -Uri https://api.github.com/repos/$repo | Select-Object -ExpandProperty default_branch
+
+          Write-Output "::set-output name=default_branch::$(echo $defaultBranch)"
+          
+      - name: Conditionals handler
+        id: conditionals_handler
+        shell: pwsh
+        run: |
+          $defaultBranch = "${{ steps.data_gatherer.outputs.default_branch }}"
+          $githubRef = "${{ github.ref }}"
+          $currentBranch = $githubRef -replace 'refs/heads/', ''
+          $githubEventName = "${{ github.event_name }}"
+          $isDefaultBranch = 'false'
+          $isPush = 'false'
+          $isPushToDefaultBranch = 'false'
+
+          if ( $currentBranch -eq $defaultBranch ) {
+            $isDefaultBranch = 'true'
+          }
+          if ( $githubEventName -eq 'push' ) {
+            $isPush = 'true'
+          }
+          if ( $currentBranch -eq $defaultBranch -and $githubEventName -eq 'push' ) {
+            $isPushToDefaultBranch = 'true'
+          }
+
+          Write-Output "::set-output name=is_default_branch::$(echo $isDefaultBranch)"
+          Write-Output "::set-output name=is_push::$(echo $isPush)"
+          Write-Output "::set-output name=is_push_to_default_branch::$(echo $isPushToDefaultBranch)"
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - if: steps.conditionals_handler.outputs.is_push_to_default_branch == 'true'
+        name: Bump GH tag
+        id: tag_generator
+        uses: mathieudutour/github-tag-action@v5.4
+        with: 
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: false
+          release_branches: ${{ steps.data_gatherer.outputs.default_branch }}
+
+      - name: Restore solution
+        shell: pwsh
+        run: |
+          dotnet restore
+
+      - name: Build solution
+        shell: pwsh
+        run: |
+          $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
+          $projectCurrentVersion = ([xml](Get-Content -Path src\Microsoft.IO.RecyclableMemoryStream.csproj)).Project.PropertyGroup.PackageVersion
+          $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
+          
+          dotnet build `
+          --configuration Release `
+          --output 'Build output' `
+          -property:Version=$projectNewVersion `
+          --no-restore
+
+          # Move NuGet packages to separate folder for pipeline convenience
+          New-Item -Name 'NuGet' -ItemType Directory
+          Get-ChildItem -Path 'Build output/' -Filter *.nupkg -Recurse | Move-Item -Destination 'NuGet/'
+
+      - name: Upload build output as pipeline artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Build output
+          path: 'Build output/'
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          dotnet test `
+          --configuration Release `
+          --logger "trx;LogFileName=$fileBaseName.trx;verbosity=normal" `
+          --results-directory 'Test results/' `
+          --no-build
+
+      - name: Upload test results as pipeline artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Test results
+          path: 'Test results/'
+
+      - if: steps.tag_generator.outputs.new_version != ''
+        name: Upload NuGet packages as pipeline artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: NuGet packages
+          path: NuGet/
+
+  cd:
+    if: needs.ci.outputs.latest_version != ''
+    name: Continuous Deployment
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      # GH CLI requires a cloned repo
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Download and extract NuGet packages artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: NuGet packages
+          path: NuGet/
+
+      - name: Push NuGet packages to NuGet.org
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path NuGet/ -Filter *.nupkg | ForEach-Object {
+            nuget push $PSItem.FullName `
+            -ApiKey $env:NUGET_API_KEY `
+            -Source https://api.nuget.org/v3/index.json
+          }
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+      - name: Create and publish release
+        shell: pwsh
+        run: |
+          $releaseTag = "v${{ needs.ci.outputs.latest_version }}"
+          $releaseTitle = "OpenApi v${{ needs.ci.outputs.latest_version }}"
+          $releaseAssets = ''
+
+          gh release create $releaseTag -t $releaseTitle $releaseAssets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# Built with ❤ by [Pipeline Foundation](https://pipeline.foundation)
