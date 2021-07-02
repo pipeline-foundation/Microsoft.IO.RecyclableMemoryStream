@@ -64,6 +64,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - if: steps.conditionals_handler.outputs.is_push_to_default_branch == 'true'
         name: Bump GH tag
@@ -73,17 +75,27 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: false
           release_branches: ${{ steps.data_gatherer.outputs.default_branch }}
+          tag_prefix: ''
 
       - name: Restore solution
         shell: pwsh
         run: |
           nuget restore Microsoft.IO.RecyclableMemoryStream.sln
 
-      - name: Build solution
+      - name: Build and pack solution
         shell: pwsh
         run: |
+          $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
+          $projectCurrentVersion = [String](([xml](Get-Content -Path src\Microsoft.IO.RecyclableMemoryStream.csproj)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
+          $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
+          $buildOutputPath = "${{ github.workspace }}/Build output"
+          $nugetOutputPath = "${{ github.workspace }}/NuGet"
+
           msbuild Microsoft.IO.RecyclableMemoryStream.sln `
-          /p:OutputPath="${{ github.workspace }}/Build output"
+          /p:OutputPath=$buildOutputPath `
+          /p:PackageVersion=$projectNewVersion `
+          /p:PackageOutputPath=$nugetOutputPath `
+          /t:build,pack
 
       - name: Upload build output as pipeline artifact
         uses: actions/upload-artifact@v1
@@ -91,13 +103,21 @@ jobs:
           name: Build output
           path: 'Build output/'
 
+      - name: Upload NuGet packages as pipeline artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: NuGet packages
+          path: NuGet/
+
       - name: Run unit tests
         continue-on-error: true
         shell: pwsh
         run: |
+          $date = Get-Date -Format "MM-dd-yyyy"
+
           dotnet test Microsoft.IO.RecyclableMemoryStream.sln `
           --output 'Build output' `
-          --logger "trx;LogFileName=Microsoft.IO.RecyclableMemoryStream.trx;verbosity=normal" `
+          --logger "trx;LogFileName=Microsoft.IO.RecyclableMemoryStream-$date.trx;verbosity=normal" `
           --results-directory 'Test results/' `
           --no-build
 
@@ -107,29 +127,28 @@ jobs:
           name: Test results
           path: 'Test results/'
 
-      - name: Pack solution
-        shell: pwsh
+      - if: steps.tag_generator.outputs.new_version != ''
+        name: Update version in project
         run: |
-          msbuild Microsoft.IO.RecyclableMemoryStream.sln
-        
-          dotnet pack Microsoft.IO.RecyclableMemoryStream.sln `
-          --include-source `
-          --include-symbols `
-          --no-build `
-          --output NuGet `
-          -property:PackageVersion='v1-test'
-
-      - name: Upload NuGet packages as pipeline artifact
-        uses: actions/upload-artifact@v1
-        with:
-          name: NuGet packages
-          path: NuGet/
+          $projFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projContent = Get-Content -Path $projFilePath -Raw
+          $updatedProjContent = $projContent -replace '<PackageVersion>.*</PackageVersion>', "<PackageVersion>${{ steps.tag_generator.outputs.new_version }}</PackageVersion>"
+          $updatedProjContent | Set-Content -Path $projFilePath
+          $userEmail = "ci-cd-pipeline@my.workflow"
+          $userName = "ci-cd-pipeline"
+          $commitMessage = "update project version to ${{ steps.tag_generator.outputs.new_version }}"
+          
+          git config --global user.email $userEmail
+          git config --global user.name $userName
+          git add $projFilePath
+          git commit -m $commitMessage
+          git push origin "${{ steps.data_gatherer.outputs.default_branch }}"
 
   cd:
     if: needs.ci.outputs.latest_version != ''
     name: Continuous Deployment
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       # GH CLI requires a cloned repo
       - name: Checkout repository
@@ -145,20 +164,18 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          Get-ChildItem -Path NuGet/ -Filter *.nupkg | ForEach-Object {
-            nuget push $PSItem.FullName `
-            -ApiKey $env:NUGET_API_KEY `
-            -Source https://api.nuget.org/v3/index.json
-          }
+          nuget push NuGet/Microsoft.IO.RecyclableMemoryStream.${{ needs.ci.outputs.latest_version }}.nupkg `
+          -ApiKey $env:NUGET_API_KEY `
+          -Source https://api.nuget.org/v3/index.json
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
       - name: Create and publish release
         shell: pwsh
         run: |
-          $releaseTag = "v${{ needs.ci.outputs.latest_version }}"
-          $releaseTitle = "OpenApi v${{ needs.ci.outputs.latest_version }}"
-          $releaseAssets = ''
+          $releaseTag = "${{ needs.ci.outputs.latest_version }}"
+          $releaseTitle = "Microsoft.IO.RecyclableMemoryStream ${{ needs.ci.outputs.latest_version }}"
+          $releaseAssets = "NuGet/Microsoft.IO.RecyclableMemoryStream.${{ needs.ci.outputs.latest_version }}.nupkg"
 
           gh release create $releaseTag -t $releaseTitle $releaseAssets
         env:
