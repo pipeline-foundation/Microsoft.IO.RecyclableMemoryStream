@@ -86,7 +86,8 @@ jobs:
         shell: pwsh
         run: |
           $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
-          $projectCurrentVersion = [String](([xml](Get-Content -Path src\Microsoft.IO.RecyclableMemoryStream.csproj)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
+          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projectCurrentVersion = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
           $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
           $buildOutputPath = "${{ github.workspace }}/Build output"
           $nugetOutputPath = "${{ github.workspace }}/NuGet"
@@ -113,11 +114,12 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $projectName = "${{ github.event.repository.name }}"
           $date = Get-Date -Format "MM-dd-yyyy"
 
           dotnet test Microsoft.IO.RecyclableMemoryStream.sln `
           --output 'Build output' `
-          --logger "trx;LogFileName=Microsoft.IO.RecyclableMemoryStream-$date.trx;verbosity=normal" `
+          --logger "trx;LogFileName=$projectName-$date.trx;verbosity=normal" `
           --results-directory 'Test results/' `
           --no-build
 
