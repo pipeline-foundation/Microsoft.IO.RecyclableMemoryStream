@@ -162,7 +162,9 @@ jobs:
           $projFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
           $projContent = Get-Content -Path $projFilePath -Raw
           $updatedProjContent = $projContent -replace '<PackageVersion>.*</PackageVersion>', "<PackageVersion>${{ steps.tag_generator.outputs.new_version }}</PackageVersion>"
+          
           $updatedProjContent | Set-Content -Path $projFilePath
+
           $userEmail = "ci-cd-pipeline@my.workflow"
           $userName = "ci-cd-pipeline"
           $commitMessage = "update project version to ${{ steps.tag_generator.outputs.new_version }}"
