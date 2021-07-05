@@ -20,6 +20,7 @@ jobs:
     steps:
       - name: Data gatherer
         id: data_gatherer
+        shell: pwsh
         run: |
           # Get default branch
           $repo = "${{ github.repository }}"
@@ -29,6 +30,7 @@ jobs:
           
       - name: Conditionals handler
         id: conditionals_handler
+        shell: pwsh
         run: |
           $defaultBranch = "${{ steps.data_gatherer.outputs.default_branch }}"
           $githubRef = "${{ github.ref }}"
@@ -73,16 +75,19 @@ jobs:
           tag_prefix: ''
 
       - name: Restore solution
+        shell: pwsh
         run: |
           dotnet restore Microsoft.IO.RecyclableMemoryStream.sln
 
       - name: Build solution
+        shell: pwsh
         run: |
           dotnet build Microsoft.IO.RecyclableMemoryStream.sln `
           --configuration Release
 
       - name: Run unit tests
         continue-on-error: true
+        shell: pwsh
         run: |
           $projectName = "${{ github.event.repository.name }}"
           $date = Get-Date -Format "MM-dd-yyyy"
@@ -101,6 +106,7 @@ jobs:
 
       - name: Version determiner
         id: version_determiner
+        shell: pwsh
         run: |
           $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
           $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
@@ -110,6 +116,7 @@ jobs:
           Write-Output "::set-output name=project_version::$(echo $projectNewVersion)"
 
       - name: Publish solution for each target framework
+        shell: pwsh
         run: |
           $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
           $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
@@ -130,6 +137,7 @@ jobs:
           path: 'Build outputs/'
 
       - name: Pack solution
+        shell: pwsh
         run: |
           $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
 
@@ -146,6 +154,7 @@ jobs:
 
       - if: steps.tag_generator.outputs.new_version != ''
         name: Update version in project
+        shell: pwsh
         run: |
           $projFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
           $projContent = Get-Content -Path $projFilePath -Raw
@@ -179,6 +188,7 @@ jobs:
 
       - name: Push NuGet packages to NuGet.org
         continue-on-error: true
+        shell: pwsh
         run: |
           nuget push NuGet/Microsoft.IO.RecyclableMemoryStream.${{ needs.ci.outputs.latest_version }}.nupkg `
           -ApiKey $env:NUGET_API_KEY `
@@ -187,6 +197,7 @@ jobs:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
       - name: Create and publish release
+        shell: pwsh
         run: |
           $releaseTag = "${{ needs.ci.outputs.latest_version }}"
           $releaseTitle = "Microsoft.IO.RecyclableMemoryStream ${{ needs.ci.outputs.latest_version }}"
