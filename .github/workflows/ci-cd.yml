@@ -83,7 +83,8 @@ jobs:
         shell: pwsh
         run: |
           dotnet build Microsoft.IO.RecyclableMemoryStream.sln `
-          --configuration Release
+          --configuration Release `
+          --no-restore
 
       - name: Run unit tests
         shell: pwsh
@@ -129,7 +130,8 @@ jobs:
             --configuration Release `
             --output "Publish outputs/$frameworkNum" `
             --framework $frameworkNum `
-            -property:PackageVersion=$projectVersion
+            -property:PackageVersion=$projectVersion `
+            --no-restore
           }
 
       - name: Upload publish output as pipeline artifact
@@ -146,7 +148,8 @@ jobs:
           dotnet pack Microsoft.IO.RecyclableMemoryStream.sln `
           --configuration Release `
           --output NuGet `
-          -property:PackageVersion=$projectVersion
+          -property:PackageVersion=$projectVersion `
+          --no-restore
 
       - name: Upload NuGet packages as pipeline artifact
         uses: actions/upload-artifact@v2
