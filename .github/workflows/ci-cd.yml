@@ -115,7 +115,7 @@ jobs:
 
           Write-Output "::set-output name=project_version::$(echo $projectNewVersion)"
 
-      - name: Publish solution for each target framework
+      - name: Publish project for each target framework
         shell: pwsh
         run: |
           $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
@@ -124,18 +124,20 @@ jobs:
           $targetFrameworks = $targetFrameworksProperty.split(';')
 
           foreach ( $framework in $targetFrameworks ) {
+            $frameworkNum = [String]($framework -replace ' ', '')
+
             dotnet publish $projectFilePath `
             --configuration Release `
-            --output "Build outputs/Build output - $framework" `
-            --framework $framework `
+            --output "Publish outputs/$frameworkNum" `
+            --framework $frameworkNum `
             -property:PackageVersion=$projectVersion
           }
 
-      - name: Upload build output as pipeline artifact
+      - name: Upload publish output as pipeline artifact
         uses: actions/upload-artifact@v2
         with:
-          name: Build outputs
-          path: 'Build outputs/'
+          name: Publish outputs
+          path: 'Publish outputs/'
 
       - name: Pack solution
         shell: pwsh
