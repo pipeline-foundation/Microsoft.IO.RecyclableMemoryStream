@@ -162,7 +162,7 @@ jobs:
           $projFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
           $projContent = Get-Content -Path $projFilePath -Raw
           $updatedProjContent = $projContent -replace '<PackageVersion>.*</PackageVersion>', "<PackageVersion>${{ steps.tag_generator.outputs.new_version }}</PackageVersion>"
-          
+
           $updatedProjContent | Set-Content -Path $projFilePath
 
           $userEmail = "ci-cd-pipeline@my.workflow"
@@ -179,7 +179,7 @@ jobs:
     if: needs.ci.outputs.latest_version != ''
     name: Continuous Deployment
     needs: ci
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       # GH CLI requires a cloned repo
       - name: Checkout repository
