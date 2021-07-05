@@ -124,7 +124,7 @@ jobs:
           $targetFrameworks = $targetFrameworksProperty.split(';')
 
           foreach ( $framework in $targetFrameworks ) {
-            dotnet publish Microsoft.IO.RecyclableMemoryStream.sln `
+            dotnet publish $projectFilePath `
             --configuration Release `
             --output "Build outputs/Build output - $framework" `
             --framework $framework `
