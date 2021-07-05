@@ -14,7 +14,7 @@ on:
 jobs:
   ci:
     name: Continuous Integration
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     outputs:
       latest_version: ${{ steps.tag_generator.outputs.new_version }}
     steps:
@@ -56,17 +56,11 @@ jobs:
         uses: actions/setup-dotnet@v1
         with:
           dotnet-version: 5.0.203
-          
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.2
 
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
 
       - if: steps.conditionals_handler.outputs.is_push_to_default_branch == 'true'
         name: Bump GH tag
@@ -80,35 +74,12 @@ jobs:
 
       - name: Restore solution
         run: |
-          nuget restore Microsoft.IO.RecyclableMemoryStream.sln
+          dotnet restore Microsoft.IO.RecyclableMemoryStream.sln
 
-      - name: Build and pack solution
+      - name: Build solution
         run: |
-          $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
-          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
-          $projectCurrentVersion = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
-          $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
-          $buildOutputPath = "${{ github.workspace }}/Build output"
-          $nugetOutputPath = "${{ github.workspace }}/NuGet"
-
-          msbuild Microsoft.IO.RecyclableMemoryStream.sln `
-          /p:Configuration=Release `
-          /p:OutputPath=$buildOutputPath `
-          /p:PackageVersion=$projectNewVersion `
-          /p:PackageOutputPath=$nugetOutputPath `
-          /t:build,pack
-
-      - name: Upload build output as pipeline artifact
-        uses: actions/upload-artifact@v1
-        with:
-          name: Build output
-          path: 'Build output/'
-
-      - name: Upload NuGet packages as pipeline artifact
-        uses: actions/upload-artifact@v1
-        with:
-          name: NuGet packages
-          path: NuGet/
+          dotnet build Microsoft.IO.RecyclableMemoryStream.sln `
+          --configuration Release
 
       - name: Run unit tests
         continue-on-error: true
@@ -118,16 +89,60 @@ jobs:
 
           dotnet test Microsoft.IO.RecyclableMemoryStream.sln `
           --configuration Release `
-          --output 'Build output' `
           --logger "trx;LogFileName=$projectName-$date.trx;verbosity=normal" `
           --results-directory 'Test results/' `
           --no-build
 
       - name: Upload test results as pipeline artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Test results
           path: 'Test results/'
+
+      - name: Version determiner
+        id: version_determiner
+        run: |
+          $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
+          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projectCurrentVersion = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
+          $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
+
+          Write-Output "::set-output name=project_version::$(echo $projectNewVersion)"
+
+      - name: Publish solution for each target framework
+        run: |
+          $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
+          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $targetFrameworksProperty = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.TargetFrameworks)
+          $targetFrameworks = $targetFrameworksProperty.split(';')
+
+          foreach ( $framework in $targetFrameworks ) {
+            dotnet publish Microsoft.IO.RecyclableMemoryStream.sln `
+            --configuration Release `
+            --output "Build outputs/Build output - $framework" `
+            -property:PackageVersion=$projectVersion
+          }
+
+      - name: Upload build output as pipeline artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: Build outputs
+          path: 'Build outputs/'
+
+      - name: Pack solution
+        run: |
+          $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
+
+          dotnet pack Microsoft.IO.RecyclableMemoryStream.sln `
+          --configuration Release `
+          --output NuGet `
+          -property:PackageVersion=$projectVersion
+
+      - name: Upload NuGet packages as pipeline artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: NuGet packages
+          path: NuGet/
 
       - if: steps.tag_generator.outputs.new_version != ''
         name: Update version in project
