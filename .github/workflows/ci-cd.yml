@@ -109,7 +109,7 @@ jobs:
         shell: pwsh
         run: |
           $gitNewVersion = if ("${{ steps.tag_generator.outputs.new_version }}") {"${{ steps.tag_generator.outputs.new_version }}"} else {$null}
-          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projectFilePath = 'src/Microsoft.IO.RecyclableMemoryStream.csproj'
           $projectCurrentVersion = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.PackageVersion) -replace '\s', ''
           $projectNewVersion = $gitNewVersion ?? $projectCurrentVersion
 
@@ -119,7 +119,7 @@ jobs:
         shell: pwsh
         run: |
           $projectVersion = "${{ steps.version_determiner.outputs.project_version }}"
-          $projectFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projectFilePath = 'src/Microsoft.IO.RecyclableMemoryStream.csproj'
           $targetFrameworksProperty = [String](([xml](Get-Content -Path $projectFilePath)).Project.PropertyGroup.TargetFrameworks)
           $targetFrameworks = $targetFrameworksProperty.split(';')
 
@@ -161,7 +161,7 @@ jobs:
         name: Update version in project
         shell: pwsh
         run: |
-          $projFilePath = 'src\Microsoft.IO.RecyclableMemoryStream.csproj'
+          $projFilePath = 'src/Microsoft.IO.RecyclableMemoryStream.csproj'
           $projContent = Get-Content -Path $projFilePath -Raw
           $updatedProjContent = $projContent -replace '<PackageVersion>.*</PackageVersion>', "<PackageVersion>${{ steps.tag_generator.outputs.new_version }}</PackageVersion>"
 
