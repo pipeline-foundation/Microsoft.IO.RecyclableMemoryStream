@@ -127,6 +127,7 @@ jobs:
             dotnet publish Microsoft.IO.RecyclableMemoryStream.sln `
             --configuration Release `
             --output "Build outputs/Build output - $framework" `
+            --framework $framework `
             -property:PackageVersion=$projectVersion
           }
 
