@@ -65,6 +65,9 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - if: steps.conditionals_handler.outputs.is_push_to_default_branch == 'true'
         name: Bump GH tag
         id: tag_generator
