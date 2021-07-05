@@ -86,7 +86,6 @@ jobs:
           --configuration Release
 
       - name: Run unit tests
-        continue-on-error: true
         shell: pwsh
         run: |
           $projectName = "${{ github.event.repository.name }}"
