@@ -23,7 +23,7 @@ jobs:
 
       # Information setup
 
-      - name: Data gatherer
+      - name: Pipeline data gatherer
         id: data_gatherer
         shell: pwsh
         run: |
@@ -33,7 +33,7 @@ jobs:
 
           Write-Output "::set-output name=default_branch::$(echo $defaultBranch)"
 
-      - name: Conditionals handler
+      - name: Pipeline conditionals handler
         id: conditionals_handler
         shell: pwsh
         run: |
@@ -60,16 +60,16 @@ jobs:
           Write-Output "::set-output name=is_push_to_default_branch::$(echo $isPushToDefaultBranch)"
 
       - if: steps.conditionals_handler.outputs.is_push_to_default_branch == 'true'
-        name: Bump GH tag
+        name: GitHub tag generator
         id: tag_generator
-        uses: mathieudutour/github-tag-action@v5.4
+        uses: mathieudutour/github-tag-action@v5.5
         with: 
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: false
           release_branches: ${{ steps.data_gatherer.outputs.default_branch }}
           tag_prefix: ''
 
-      - name: Version determiner
+      - name: Project version determiner
         id: version_determiner
         shell: pwsh
         run: |
