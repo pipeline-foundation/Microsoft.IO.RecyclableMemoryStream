@@ -6,13 +6,9 @@ jobs:
   ci:
     name: Continuous Integration
     runs-on: ubuntu-latest
-    outputs:
-      latest_version: ${{ steps.tag_generator.outputs.new_version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       # Tooling setup
 
